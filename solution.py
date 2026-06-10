@@ -31,24 +31,15 @@ OUTPUT_FILE = 'processed_data.csv'
 
 
 def extract(file_path):
-    """
-    Task 1: Doc du lieu JSON tu file.
-
-    Goi y:
-       - Dung json.load() de doc file JSON
-       - Xu ly truong hop file khong ton tai (FileNotFoundError)
-
-    Returns:
-        list: Danh sach cac records (dictionaries)
-    """
-    print(f"Extracting data from {file_path}...")
-    # TODO: Viet code doc file JSON o day
-    # Vi du:
-    #   with open(file_path, 'r') as f:
-    #       data = json.load(f)
-    #   return data
-    pass
-
+    try:
+        with open(file_path, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    except FileNotFoundError:
+        print(f"Error: File '{file_path}' không tồn tại.")
+        return []
+    except json.JSONDecodeError:
+        print(f"Error: File '{file_path}' bị lỗi cấu trúc JSON.")
+        return []
 
 def validate(data):
     """
@@ -67,12 +58,24 @@ def validate(data):
         list: Danh sach cac records hop le
     """
     valid_records = []
-    error_count = 0
-
-    # TODO: Lap qua data, kiem tra tung record
-    # Giu lai record hop le, dem record loi
-
-    print(f"Validation complete. Valid: {len(valid_records)}, Errors: {error_count}")
+    dropped_records = []
+    
+    for record in data:
+        # Check Price
+        if record.get('price', 0) <= 0:
+            dropped_records.append({"id": record.get('id'), "reason": "Price <= 0"})
+            continue
+            
+        # Check Category
+        if not record.get('category'):
+            dropped_records.append({"id": record.get('id'), "reason": "Missing Category"})
+            continue
+            
+        valid_records.append(record)
+        
+    print(f"Validation summary: {len(valid_records)} kept, {len(dropped_records)} dropped.")
+    if dropped_records:
+        print(f"Errors found: {dropped_records}")
     return valid_records
 
 
@@ -94,8 +97,23 @@ def transform(data):
     Returns:
         pd.DataFrame: DataFrame da duoc transform
     """
-    # TODO: Tao DataFrame va ap dung transformations
-    pass
+    if not data:
+        print("Warning: No data to transform.")
+        return pd.DataFrame()
+        
+    df = pd.DataFrame(data)
+    
+    # Tao 1 timestamp duy nhat cho ca batch du lieu (Batch processing pattern)
+    batch_timestamp = datetime.datetime.now().isoformat()
+    
+    # Su dung Method Chaining (.assign) - Tieu chuan code Pandas cao cap / Clean Code
+    transformed_df = df.assign(
+        discounted_price=lambda x: x['price'] * 0.9,
+        category=lambda x: x['category'].str.title(),
+        processed_at=batch_timestamp
+    )
+    
+    return transformed_df
 
 
 def load(df, output_path):
@@ -105,8 +123,21 @@ def load(df, output_path):
     Goi y:
        - df.to_csv(output_path, index=False)
     """
-    # TODO: Luu DataFrame ra CSV
-    print(f"Data saved to {output_path}")
+    if df.empty:
+        print(f"Warning: DataFrame is empty. Skipping save to {output_path}")
+        return
+
+    try:
+        # Tu dong tao thu muc neu chua ton tai (chong loi FileNotFoundError)
+        os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
+        
+        # Luu DataFrame
+        df.to_csv(output_path, index=False)
+        print(f"Data saved successfully to {output_path} ({len(df)} records)")
+    except PermissionError:
+        print(f"Error: Permission denied. File '{output_path}' co the dang mo trong Excel.")
+    except Exception as e:
+        print(f"Error saving data: {e}")
 
 
 # ============================================================
